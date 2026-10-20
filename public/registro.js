@@ -13,8 +13,7 @@
 
   function validar(datos) {
     if (!datos.nombre) return ['f-nombre', 'Escribe tu nombre completo.'];
-    if (!datos.negocio) return ['f-negocio', 'Escribe el nombre de tu negocio.'];
-    if (!datos.giro) return ['f-giro', 'Selecciona el giro de tu negocio.'];
+    if (!datos.giro) return ['f-giro', 'Selecciona tu sector.'];
     if (datos.whatsapp.replace(/\D/g, '').length < 10) return ['f-whatsapp', 'Escribe un número de WhatsApp de 10 dígitos.'];
     if (datos.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo)) return ['f-correo', 'Revisa el correo electrónico; parece incompleto.'];
     if (!datos.fecha) return [null, 'Elige la fecha que prefieres.'];

@@ -27,13 +27,15 @@ async function prepararBase() {
       id          SERIAL PRIMARY KEY,
       creado_en   TIMESTAMPTZ NOT NULL DEFAULT now(),
       nombre      TEXT NOT NULL,
-      negocio     TEXT NOT NULL,
+      negocio     TEXT,
       giro        TEXT NOT NULL,
       whatsapp    TEXT NOT NULL,
       correo      TEXT,
       fecha       TEXT NOT NULL,
       reto        TEXT
     )`);
+  // Si la tabla ya existía con la versión anterior, permite empresa vacía
+  await pool.query('ALTER TABLE registros ALTER COLUMN negocio DROP NOT NULL');
 }
 
 const app = express();
@@ -66,7 +68,7 @@ setInterval(() => {
   for (const [ip, l] of intentos) if (!l.some(t => ahora - t < 3600e3)) intentos.delete(ip);
 }, 600e3).unref();
 
-const GIROS = ['Comercio', 'Restaurante o alimentos', 'Hotelería o turismo', 'Servicios', 'Agroindustria', 'Otro'];
+const GIROS = ['Agroindustria y campo', 'Industria y manufactura', 'Artesanía', 'Comercio', 'Restaurante o alimentos', 'Hotelería o turismo', 'Servicios profesionales', 'Gobierno o educación', 'Estudiante', 'Otro'];
 const FECHAS = { '6 nov': 'Viernes 6 de noviembre', '13 nov': 'Viernes 13 de noviembre', 'cualquiera': 'Cualquiera de las dos' };
 const limpiar = (v, max) => String(v ?? '').trim().slice(0, max);
 
@@ -83,8 +85,8 @@ app.post('/api/registro', limitar, async (req, res) => {
     fecha: limpiar(b.fecha, 20),
     reto: limpiar(b.reto, 1500)
   };
-  if (!d.nombre || !d.negocio) return res.status(400).json({ error: 'Escribe tu nombre y el nombre de tu negocio.' });
-  if (!GIROS.includes(d.giro)) return res.status(400).json({ error: 'Selecciona el giro de tu negocio.' });
+  if (!d.nombre) return res.status(400).json({ error: 'Escribe tu nombre completo.' });
+  if (!GIROS.includes(d.giro)) return res.status(400).json({ error: 'Selecciona tu sector.' });
   if (d.whatsapp.replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Escribe un número de WhatsApp de 10 dígitos.' });
   if (d.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.correo)) return res.status(400).json({ error: 'Revisa el correo electrónico; parece incompleto.' });
   if (!FECHAS[d.fecha]) return res.status(400).json({ error: 'Elige la fecha que prefieres.' });
@@ -92,7 +94,7 @@ app.post('/api/registro', limitar, async (req, res) => {
   try {
     await pool.query(
       'INSERT INTO registros (nombre, negocio, giro, whatsapp, correo, fecha, reto) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [d.nombre, d.negocio, d.giro, d.whatsapp, d.correo || null, FECHAS[d.fecha], d.reto || null]
+      [d.nombre, d.negocio || null, d.giro, d.whatsapp, d.correo || null, FECHAS[d.fecha], d.reto || null]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -136,7 +138,7 @@ app.get('/admin', soloAdmin, async (req, res) => {
       <td><a href="https://wa.me/52${esc(r.whatsapp.replace(/\D/g, '').slice(-10))}">${esc(r.whatsapp)}</a></td>
       <td>${esc(r.correo)}</td><td>${esc(r.fecha)}</td><td class="reto">${esc(r.reto)}</td></tr>`).join('');
     res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Registros · Masterclass CANACO Uruapan</title>
+<title>Registros · Masterclass Academia Global</title>
 <style>
 body{margin:0;font-family:Poppins,'Segoe UI',Helvetica,sans-serif;background:#F5F3EC;color:#1B1F36}
 header{background:#071552;color:#fff;padding:1.5rem}
@@ -155,11 +157,11 @@ td.reto{min-width:260px}
 <main>
 <div class="res">
 <div><strong>Por fecha</strong><ul>${conteo('fecha') || '<li>Sin registros todavía</li>'}</ul></div>
-<div><strong>Por giro</strong><ul>${conteo('giro') || '<li>Sin registros todavía</li>'}</ul></div>
+<div><strong>Por sector</strong><ul>${conteo('giro') || '<li>Sin registros todavía</li>'}</ul></div>
 </div>
 <a class="btn" href="/admin/registros.csv">Descargar CSV para Excel</a>
 <div class="tabla"><table>
-<thead><tr><th>Fecha de registro</th><th>Nombre</th><th>Negocio</th><th>Giro</th><th>WhatsApp</th><th>Correo</th><th>Fecha preferida</th><th>Qué quiere resolver</th></tr></thead>
+<thead><tr><th>Fecha de registro</th><th>Nombre</th><th>Empresa u organización</th><th>Sector</th><th>WhatsApp</th><th>Correo</th><th>Fecha preferida</th><th>Qué quiere resolver</th></tr></thead>
 <tbody>${filas || '<tr><td colspan="8">Todavía no hay registros. Comparte la página para empezar a recibirlos.</td></tr>'}</tbody>
 </table></div>
 </main></body></html>`);
@@ -177,11 +179,11 @@ app.get('/admin/registros.csv', soloAdmin, async (req, res) => {
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // evita fórmulas al abrir en Excel
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const enc = ['Fecha de registro', 'Nombre', 'Negocio', 'Giro', 'WhatsApp', 'Correo', 'Fecha preferida', 'Qué quiere resolver'];
+    const enc = ['Fecha de registro', 'Nombre', 'Empresa u organización', 'Sector', 'WhatsApp', 'Correo', 'Fecha preferida', 'Qué quiere resolver'];
     const lineas = [enc.map(celda).join(',')].concat(rows.map(r =>
       [fechaMx(r.creado_en), r.nombre, r.negocio, r.giro, r.whatsapp, r.correo, r.fecha, r.reto].map(celda).join(',')));
     res.set('Content-Type', 'text/csv; charset=utf-8');
-    res.set('Content-Disposition', 'attachment; filename="registros-masterclass-canaco.csv"');
+    res.set('Content-Disposition', 'attachment; filename="registros-masterclass-ia.csv"');
     res.send('\uFEFF' + lineas.join('\r\n'));
   } catch (err) {
     console.error(err);

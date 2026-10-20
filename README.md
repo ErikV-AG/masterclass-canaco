@@ -1,4 +1,4 @@
-# IA potenciada por humanos · Masterclass CANACO Uruapan
+# IA potenciada por humanos · Masterclass Academia Global
 
 Landing page con registro de interesados. Cada registro se guarda en una base de datos Postgres y puede consultarse en un panel protegido con contraseña, con opción de descarga en CSV para Excel.
 
