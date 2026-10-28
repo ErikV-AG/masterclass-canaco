@@ -34,7 +34,7 @@ El navegador pedirá el usuario y la contraseña definidos en las variables.
 
 ## Pendientes de contenido
 
-En `public/index.html`, busca y reemplaza `[Horario]` y `[Sede o modalidad]` (aparecen tres veces cada uno). Completa los datos entre corchetes del aviso de privacidad.
+En `public/index.html`, Completa los datos entre corchetes del aviso de privacidad.
 
 ## Prueba local
 
@@ -42,3 +42,16 @@ En `public/index.html`, busca y reemplaza `[Horario]` y `[Sede o modalidad]` (ap
 npm install
 DATABASE_URL=postgres://usuario:clave@localhost:5432/base ADMIN_USER=admin ADMIN_PASSWORD=prueba npm start
 ```
+
+## Rediseño de la landing (octubre 2026)
+
+Solo cambian los archivos de `public/`; `server.js`, la base de datos, `/api/registro`, `/admin` y el CSV quedan igual.
+
+- `public/index.html` y `public/registro.js`: nuevo diseño y formulario (mismos campos y valores que valida el servidor).
+- Imágenes nuevas en `public/img/`: `portada-video.jpg`, `hero-loop.mp4`, `hero-loop.webm`, `restaurante-comal.jpg`, `hotel-patio.jpg`.
+- Ya no se usan y se pueden borrar del repo: `hotel.jpg`, `huerta.jpg`, `restaurante.jpg`, `tienda.jpg`, `portada-huerta.jpg`.
+- Pendientes de contenido en `index.html`: `[Correo de contacto]` y `[Teléfono o WhatsApp]`.
+
+## Seguimiento por canal
+
+Agrega `?origen=<canal>` al enlace que compartes (por ejemplo `?origen=facebook` o `?origen=whatsapp`; también se acepta `utm_source`). El canal se guarda con cada registro y el panel muestra el conteo por canal. Sin parámetro, el registro aparece como `directo`; quien llega desde el botón «Invitar por WhatsApp» de la confirmación aparece como `invitacion`.

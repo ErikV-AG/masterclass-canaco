@@ -36,6 +36,7 @@ async function prepararBase() {
     )`);
   // Si la tabla ya existía con la versión anterior, permite empresa vacía
   await pool.query('ALTER TABLE registros ALTER COLUMN negocio DROP NOT NULL');
+  await pool.query("ALTER TABLE registros ADD COLUMN IF NOT EXISTS origen TEXT");
 }
 
 const app = express();
@@ -83,7 +84,8 @@ app.post('/api/registro', limitar, async (req, res) => {
     whatsapp: limpiar(b.whatsapp, 30),
     correo: limpiar(b.correo, 160).toLowerCase(),
     fecha: limpiar(b.fecha, 20),
-    reto: limpiar(b.reto, 1500)
+    reto: limpiar(b.reto, 1500),
+    origen: limpiar(b.origen, 30).toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'directo'
   };
   if (!d.nombre) return res.status(400).json({ error: 'Escribe tu nombre completo.' });
   if (!GIROS.includes(d.giro)) return res.status(400).json({ error: 'Selecciona tu sector.' });
@@ -93,8 +95,8 @@ app.post('/api/registro', limitar, async (req, res) => {
 
   try {
     await pool.query(
-      'INSERT INTO registros (nombre, negocio, giro, whatsapp, correo, fecha, reto) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [d.nombre, d.negocio || null, d.giro, d.whatsapp, d.correo || null, FECHAS[d.fecha], d.reto || null]
+      'INSERT INTO registros (nombre, negocio, giro, whatsapp, correo, fecha, reto, origen) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [d.nombre, d.negocio || null, d.giro, d.whatsapp, d.correo || null, FECHAS[d.fecha], d.reto || null, d.origen]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -131,12 +133,13 @@ const fechaMx = t => new Date(t).toLocaleString('es-MX', { timeZone: 'America/Me
 app.get('/admin', soloAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM registros ORDER BY creado_en DESC');
+    rows.forEach(r => { r.origen = r.origen || 'directo'; });
     const conteo = campo => Object.entries(rows.reduce((m, r) => (m[r[campo]] = (m[r[campo]] || 0) + 1, m), {}))
       .sort((a, b) => b[1] - a[1]).map(([k, v]) => `<li>${esc(k)}: <strong>${v}</strong></li>`).join('');
     const filas = rows.map(r => `<tr>
       <td>${esc(fechaMx(r.creado_en))}</td><td>${esc(r.nombre)}</td><td>${esc(r.negocio)}</td><td>${esc(r.giro)}</td>
       <td><a href="https://wa.me/52${esc(r.whatsapp.replace(/\D/g, '').slice(-10))}">${esc(r.whatsapp)}</a></td>
-      <td>${esc(r.correo)}</td><td>${esc(r.fecha)}</td><td class="reto">${esc(r.reto)}</td></tr>`).join('');
+      <td>${esc(r.correo)}</td><td>${esc(r.fecha)}</td><td>${esc(r.origen || 'directo')}</td><td class="reto">${esc(r.reto)}</td></tr>`).join('');
     res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Registros · Masterclass Academia Global</title>
 <style>
@@ -157,12 +160,13 @@ td.reto{min-width:260px}
 <main>
 <div class="res">
 <div><strong>Por fecha</strong><ul>${conteo('fecha') || '<li>Sin registros todavía</li>'}</ul></div>
+<div><strong>Por canal</strong><ul>${conteo('origen') || '<li>Sin registros todavía</li>'}</ul></div>
 <div><strong>Por sector</strong><ul>${conteo('giro') || '<li>Sin registros todavía</li>'}</ul></div>
 </div>
 <a class="btn" href="/admin/registros.csv">Descargar CSV para Excel</a>
 <div class="tabla"><table>
-<thead><tr><th>Fecha de registro</th><th>Nombre</th><th>Empresa u organización</th><th>Sector</th><th>WhatsApp</th><th>Correo</th><th>Fecha preferida</th><th>Qué quiere resolver</th></tr></thead>
-<tbody>${filas || '<tr><td colspan="8">Todavía no hay registros. Comparte la página para empezar a recibirlos.</td></tr>'}</tbody>
+<thead><tr><th>Fecha de registro</th><th>Nombre</th><th>Empresa u organización</th><th>Sector</th><th>WhatsApp</th><th>Correo</th><th>Fecha preferida</th><th>Canal</th><th>Qué quiere resolver</th></tr></thead>
+<tbody>${filas || '<tr><td colspan="9">Todavía no hay registros. Comparte la página para empezar a recibirlos.</td></tr>'}</tbody>
 </table></div>
 </main></body></html>`);
   } catch (err) {
@@ -179,9 +183,9 @@ app.get('/admin/registros.csv', soloAdmin, async (req, res) => {
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // evita fórmulas al abrir en Excel
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const enc = ['Fecha de registro', 'Nombre', 'Empresa u organización', 'Sector', 'WhatsApp', 'Correo', 'Fecha preferida', 'Qué quiere resolver'];
+    const enc = ['Fecha de registro', 'Nombre', 'Empresa u organización', 'Sector', 'WhatsApp', 'Correo', 'Fecha preferida', 'Canal', 'Qué quiere resolver'];
     const lineas = [enc.map(celda).join(',')].concat(rows.map(r =>
-      [fechaMx(r.creado_en), r.nombre, r.negocio, r.giro, r.whatsapp, r.correo, r.fecha, r.reto].map(celda).join(',')));
+      [fechaMx(r.creado_en), r.nombre, r.negocio, r.giro, r.whatsapp, r.correo, r.fecha, r.origen || 'directo', r.reto].map(celda).join(',')));
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition', 'attachment; filename="registros-masterclass-ia.csv"');
     res.send('\uFEFF' + lineas.join('\r\n'));
